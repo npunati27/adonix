@@ -8,7 +8,7 @@ export interface User {
 	}
 }
 
-export interface TokenPayLoad {
+export interface HackTokenPayLoad {
 	user: string,
 	role: Role,
 	access_level: number,

@@ -1,102 +1,80 @@
-import { EncodeResult, TokenPayLoad, User } from "./hackTokens-formats.js";
-import { Role } from "../../models";
+import { EncodeResult, HackTokenPayLoad } from "./hackTokens-formats.js";
 import ms from "ms";
 import Constants from "../../constants.js";
-import crypto from "crypto";
+// import { randomBytes } from "crypto";
+import * as crypto from "crypto";
 
-export function getTokenPayLoadFromUser(u: User): TokenPayLoad {
-	const uUser:string = u.user;
-	const uRole:Role = u.data.role;
-	const uAccessLevel:number = u.data.access_level;
-
-	const payLoad: TokenPayLoad = {
-		user: uUser,
-		role: uRole,
-		access_level: uAccessLevel,
-	};
-
-	return payLoad;
-}
-export function encodeToken(payload?: TokenPayLoad, expiration?: string): EncodeResult {
+/**
+ * encodeToken takes a HackTokenPayload and an optional expiration to return an encoded token.
+ * Uses the aes-192-cbc algorithm along with a 16 byte initialization vector.
+ * The token it returns is in the format of `{encryptPayload}.${signature}`.
+ * For brevity, the Initialization vector is represented as a 32 bit Little endian integer.
+ * @param payload
+ * @param expiration
+ */
+export function encodeToken(payload?: HackTokenPayLoad, expiration?: string): EncodeResult {
 	if (!payload) {
 		throw new Error("No Payload Passed In!");
 	}
-	//const secret: string | undefined = process.env.JWT_SECRET;
-	const secret: string = "12345678920234059739139467043y9y9384759369832479";
-	if (!secret) {
-		throw new Error("No secret specified");
-	}
+	const secret: string = process.env.JWT_SECRET ?? Constants.DEFAULT_JWT_SIGNING_SECRET;
 	const offset: number = ms(expiration ?? Constants.DEFAULT_JWT_OFFSET);
 	payload.exp = Math.floor(Date.now() + offset) / Constants.MILLISECONDS_PER_SECOND;
-	const keyLen: number = 24;
-	const key: Buffer = crypto.scryptSync(secret, "salt", keyLen);
+	const key: Buffer = crypto.scryptSync(secret, "salt", Constants.HACKTOKEN_KEYLEN);
 
 	const payloadString: string = JSON.stringify(payload);
-	const n: number = 16;
-	const f: number = 0;
-	const iv: Buffer = Buffer.alloc(n, f);
-	const cipher:crypto.Cipher = crypto.createCipheriv("aes-192-cbc", key, iv);
-
+	const iv: Buffer = Buffer.alloc(Constants.HACKTOKEN_IV_SIZE);
+	const cipher:crypto.Cipher = crypto.createCipheriv(Constants.HACKTOKEN_ALGORITHM, key, iv);
 
 	let encryptPayload: string = cipher.update(payloadString, "utf-8", "hex");
 	encryptPayload += cipher.final("hex");
 
-	// todo signature stuff
+	const signature:string = crypto.createHmac("sha256", secret).update(encryptPayload).digest("hex");
+	const token:string = `${encryptPayload}.${signature}`;
 
 	return {
-		token: encryptPayload,
+		token: token,
 		context: {
 			iv: iv.readInt32LE(),
 		},
 	};
 }
 
-export function decodeToken(token?: EncodeResult): TokenPayLoad {
-	if (!token) {
+/**
+ * decodeToken takes the result from encodeToken() and returns the original user information in the form of a
+ * HackTokenPayload.
+ * @param encoded
+ */
+export function decodeToken(encoded?: EncodeResult): HackTokenPayLoad {
+	if (!encoded) {
 		throw new Error("No Token Provided!");
 	}
-	//const secret: string | undefined = process.env.JWT_SECRET;
-	const secret: string = "12345678920234059739139467043y9y9384759369832479";
-	if (!secret) {
-		throw new Error("No secret Specified!");
-	}
-	const keyLen: number = 24;
-	const key: Buffer = crypto.scryptSync(secret, "salt", keyLen);
-	const n: number = 16;
-	const f: number = 0;
-	const iv: Buffer = Buffer.alloc(n, f);
-	// JSON.parse(token.context)
-	iv.writeInt32LE(token.context.iv);
 
-	const decipher:crypto.Decipher = crypto.createDecipheriv("aes-192-cbc", key, iv);
-	let decryptPayload:string = decipher.update(token.token, "hex", "utf8");
+	const [ receivedPayload , receivedSignature ] = encoded.token.split(".");
+	const secret: string = process.env.JWT_SECRET ?? Constants.DEFAULT_JWT_SIGNING_SECRET;
+
+	const expectedSignature: string = crypto.createHmac("sha256", secret).update(receivedPayload as string).digest("hex");
+	if (expectedSignature != receivedSignature) {
+		throw new Error("Invalid Token: given signature does not match expected signature");
+	}
+
+	const key: Buffer = crypto.scryptSync(secret, "salt", Constants.HACKTOKEN_KEYLEN);
+	const ivDefaultValue: number = 0;
+	const iv: Buffer = Buffer.alloc(Constants.HACKTOKEN_IV_SIZE, ivDefaultValue);
+	iv.writeInt32LE(encoded.context.iv);
+
+	const decipher: crypto.Decipher = crypto.createDecipheriv(Constants.HACKTOKEN_ALGORITHM, key, iv);
+	let decryptPayload: string = decipher.update(receivedPayload as string, "hex", "utf8");
 	decryptPayload += decipher.final("utf8");
 
-	const decodedPayload:TokenPayLoad = JSON.parse(decryptPayload) as TokenPayLoad;
-	const currTime:number = Math.floor(Date.now()) / Constants.MILLISECONDS_PER_SECOND;
+	const decodedPayload: HackTokenPayLoad = JSON.parse(decryptPayload) as HackTokenPayLoad;
+	const currTime: number = Math.floor(Date.now()) / Constants.MILLISECONDS_PER_SECOND;
 
 	if (!decodedPayload.exp) {
 		throw new Error("Token lacks expiration date!");
 	}
-	//check if token expired
-	if (decodedPayload && decodedPayload.exp < currTime) {
+
+	if (decodedPayload.exp < currTime) {
 		throw new Error("Token is expired!");
 	}
 	return decodedPayload;
-}
-
-export function getUserFromTokenPayload(payload: TokenPayLoad): User {
-	const uUserID: string = payload.user;
-	const uUserRole: Role = payload.role;
-	const uAccessLevel: number = payload.access_level;
-
-	const u : User = {
-		user: uUserID,
-		data: {
-			role: uUserRole,
-			access_level: uAccessLevel,
-		},
-	};
-
-	return u;
 }

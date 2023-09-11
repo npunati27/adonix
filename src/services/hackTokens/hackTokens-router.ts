@@ -1,6 +1,6 @@
 import { Request, Router, Response } from "express";
-import { EncodeResult, TokenPayLoad, User } from "./hackTokens-formats.js";
-import { decodeToken, encodeToken, getTokenPayLoadFromUser, getUserFromTokenPayload } from "./hackTokens-lib.js";
+import { EncodeResult, HackTokenPayLoad, User } from "./hackTokens-formats.js";
+import { decodeToken, encodeToken } from "./hackTokens-lib.js";
 import Constants from "../../constants.js";
 import * as console from "console";
 
@@ -17,21 +17,24 @@ const hackTokensRouter: Router = Router();
  * @apiBody {number} access_level User's access_level.
  * @apiParamExample {json} Example Request:
  *	{
- "user": "john_doe",
- "data": {
-        "role": admin,
-        "access_level" : 5
-        }
+ 		"user": "john_doe",
+ 		"data": {
+        	"role": admin,
+        	"access_level" : 5
+ 		}
  * 	}
  *
  * @apiSuccess (200: Success) {String} token Encoded Token.
- * @apiSuccess (200: Success) {String} context Additional Data.
+ * @apiSuccess (200: Success) {EncodeContext} context Additional Data - contains 16 byte initialization vector
+ * 	for the aes-192-cbc algorithm.
 
  * @apiSuccessExample Example Success Response:
  * 	HTTP/1.1 200 OK
  *	{
- "token": "loremipsumdolorsitelet",
- "context": {}
+ 		"token": "loremipsumdolorsitelet",
+ 		"context": {
+			"iv": 123
+ 		}
  * 	}
  *
  * @apiUse verifyErrors
@@ -39,8 +42,11 @@ const hackTokensRouter: Router = Router();
 hackTokensRouter.post("/encode", (req: Request, res: Response) => {
 	try {
 		const user: User = req.body as User;
-
-		const payload: TokenPayLoad | undefined = getTokenPayLoadFromUser(user);
+		const payload: HackTokenPayLoad = {
+			user: user.user,
+			role: user.data.role,
+			access_level: user.data.access_level,
+		};
 		const token: EncodeResult = encodeToken(payload);
 		res.status(Constants.SUCCESS).json(token);
 	} catch (error: unknown) {
@@ -55,11 +61,13 @@ hackTokensRouter.post("/encode", (req: Request, res: Response) => {
  * @apiDescription decode a token to a user and it's data
  *
  * @apiBody {String} token Encoded Token
- * @apiBody {Object} context Additional Information.
+ * @apiBody {EncodeContext} context Additional Information with IV.
  * @apiParamExample {json} Example Request:
  *    {
- *  "token": "loremipsumdolorsitelet",
- *  "context": {}
+ *  	"token": "loremipsumdolorsitelet",
+ *  	"context": {
+ *  		"iv": 123
+ *  	}
  *    }
  *
  * @apiSuccess (200: Success) {String} user UserID
@@ -70,11 +78,11 @@ hackTokensRouter.post("/encode", (req: Request, res: Response) => {
  * @apiSuccessExample Example Success Response:
  * 	HTTP/1.1 200 OK
  * {
- *  "user": "john_doe",
- *  "data": {
- *         "role": admin
- *         "access_level" : 5
- *         }
+ * 		"user": "john_doe",
+ *  	"data": {
+ *  		"role": admin
+ *  		"access_level" : 5
+ *      }
  * }
  *
  * @apiUse verifyErrors
@@ -82,8 +90,14 @@ hackTokensRouter.post("/encode", (req: Request, res: Response) => {
 hackTokensRouter.post("/decode", (req: Request, res: Response) => {
 	const encoded: EncodeResult = req.body as EncodeResult;
 	try {
-		const payload:TokenPayLoad | undefined = decodeToken(encoded);
-		const user: User | undefined = getUserFromTokenPayload(payload);
+		const payload: HackTokenPayLoad = decodeToken(encoded);
+		const user: User = {
+			user: payload.user,
+			data: {
+				role: payload.role,
+				access_level: payload.access_level,
+			},
+		};
 		res.status(Constants.SUCCESS).json(user);
 	} catch (error: unknown) {
 		console.error(error);
