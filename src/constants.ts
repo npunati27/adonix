@@ -41,6 +41,11 @@ abstract class Constants {
 	
 	static readonly DEFAULT_JWT_OFFSET: string = "48h";
 
+	static readonly DEFAULT_JWT_SIGNING_SECRET: string = "12345678920234059739139467043y9y9384759369832479";
+	static readonly HACKTOKEN_KEYLEN: number = 24;
+	static readonly HACKTOKEN_IV_SIZE: number = 16;
+	static readonly HACKTOKEN_ALGORITHM: string = "aes-192-cbc";
+
 	// Conversions for datetimes
 	static readonly MILLISECONDS_PER_SECOND:number = 1000;
 	
