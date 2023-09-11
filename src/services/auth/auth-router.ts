@@ -15,7 +15,7 @@ import { SelectAuthProvider } from "../../middleware/select-auth.js";
 import { ModifyRoleRequest } from "./auth-formats.js";
 import { JwtPayload, ProfileData, Provider, RoleOperation } from "./auth-models.js";
 import { generateJwtToken, getDevice, getJwtPayloadFromProfile, getRoles, hasElevatedPerms, updateRoles, verifyFunction } from "./auth-lib.js";
-
+import process from "node:process";
 
 passport.use(Provider.GITHUB, new GitHubStrategy({
 	clientID: process.env.GITHUB_OAUTH_ID ?? "",

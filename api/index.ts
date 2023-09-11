@@ -5,12 +5,14 @@ import helmet from "helmet";
 import morgan from "morgan";
 
 import Constants from "../src/constants.js";
-import authRouter from "../src/services/auth/auth-router.js";
+//import authRouter from "../src/services/auth/auth-router.js";
 import userRouter from "../src/services/user/user-router.js";
 import eventRouter from "../src/services/event/event-router.js";
 import profileRouter from "../src/services/profile/profile-router.js";
 import newsletterRouter from "../src/services/newsletter/newsletter-router.js";
+import hackTokenRouter from "../src/services/hackTokens/hackTokens-router.js";
 
+import process from "node:process";
 const app: Application = express();
 
 // Utility packages (detailed in the readme)
@@ -24,11 +26,12 @@ if (env == "preview" || env == "production") {
 }
 
 // Add routers for each sub-service
-app.use("/auth/", authRouter);
+//app.use("/auth/", authRouter);
 app.use("/user/", userRouter);
 app.use("/newsletter/", newsletterRouter);
 app.use("/event/", eventRouter);
 app.use("/profile/", profileRouter);
+app.use("/hackTokens/", hackTokenRouter);
 
 // Ensure that API is running
 app.get("/", (_: Request, res: Response) => {
